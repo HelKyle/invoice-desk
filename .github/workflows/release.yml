@@ -44,7 +44,9 @@ jobs:
             requirements-check.txt
             requirements-desktop.txt
       - name: Install Node dependencies
-        run: npm ci --registry=https://registry.npmjs.org
+        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+      - name: Install Electron runtime
+        run: node node_modules/electron/install.js
       - name: Prepare Python and browser test environment
         run: node scripts/ci-setup.cjs
       - name: Test invoice engine

@@ -51,6 +51,7 @@ macOS 14 及以上、Apple Silicon：解压 `release/InvoiceDesk-1.0.0-mac-arm64
 
 ```bash
 npm ci
+node node_modules/electron/install.js
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-desktop.txt
 .venv/bin/python -m playwright install chromium --only-shell
