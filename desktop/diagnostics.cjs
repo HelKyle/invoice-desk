@@ -15,7 +15,7 @@ function report(state, version) {
   return JSON.stringify({
     app_version: version, platform: process.platform, architecture: process.arch, os_release: os.release(),
     cpu_count: os.cpus().length, cpu_model: os.cpus()[0]?.model, memory_total_mb: Math.round(os.totalmem() / 1024 ** 2), memory_free_mb: Math.round(os.freemem() / 1024 ** 2),
-    phase: state.phase, stage: state.message, last_failure: state.diagnostic || null, engine_stderr: state.engineStderr || '',
+    phase: state.phase, stage: state.message, retry: state.current?.retry || 0, last_failure: state.diagnostic || null, engine_stderr: state.engineStderr || '',
   }, (_key, value) => typeof value === 'string' ? redact(value, 0) : value, 2);
 }
 module.exports = { redact, report };

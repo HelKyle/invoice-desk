@@ -149,6 +149,8 @@ class WorkerClient:
                 emit("stage", message=self.last_stage)
                 self.process.start()
                 child_connection.close()
+                self.last_stage = "查验子进程已启动，正在等待初始化"
+                emit("stage", message=self.last_stage)
                 self.receive("ready", self.startup_timeout)
             self.last_stage = "正在等待查验子进程返回"
             self.connection.send({"command": "verify", "invoice": invoice, "output": str(output)})

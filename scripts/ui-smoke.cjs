@@ -52,7 +52,11 @@ const { report } = require('../desktop/diagnostics.cjs');
     const outputChoice = await page.evaluate(() => window.invoiceDesk.chooseOutput());
     assert.equal(outputChoice.error, undefined);
     await page.locator('#start-button').click();
-    await page.waitForFunction(() => document.querySelector('#status-title').textContent.includes('正在加载本地识别模型'));
+    await page.waitForFunction(() => {
+      const title = document.querySelector('#status-title').textContent;
+      return title.includes('正在加载本地识别模型') || document.querySelector('#retry-badge').textContent !== '重试 0/10' || document.querySelector('#phase-badge').textContent === '可继续查验';
+    }, null, { timeout: 110000 });
+    assert.match(await page.locator('#status-title').innerText(), /正在加载本地识别模型/, 'Worker must reach OCR initialization before any retry');
     await app.close();
     const reopened = await electron.launch(launchOptions);
     try {
