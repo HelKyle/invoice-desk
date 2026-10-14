@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('invoiceDesk', {
   chooseOutput: () => ipcRenderer.invoke('output:choose'),
   openOutput: () => ipcRenderer.invoke('output:open'),
   copyDiagnostics: () => ipcRenderer.invoke('diagnostics:copy'),
+  openDiagnostics: () => ipcRenderer.invoke('diagnostics:open'),
   onState: callback => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('workspace:changed', listener);

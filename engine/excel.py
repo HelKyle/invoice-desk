@@ -157,9 +157,11 @@ def read_workbook(source):
                 if header_field(number)[0] == "invoice_number" or label.startswith(("合计", "总计", "小计", "汇总", "total")):
                     continue
                 location = f"{name} 第{row_index}行"
+                parsed_number = None
                 try:
+                    parsed_number = parse_number(number)
                     invoice = {
-                        "invoice_number": parse_number(number),
+                        "invoice_number": parsed_number,
                         "invoice_code": "",  # 20位数电发票无需代码。
                         "issue_date": parse_date(cell("issue_date"), epoch),
                         "amount": parse_amount(cell("amount")),
@@ -174,14 +176,14 @@ def read_workbook(source):
                         else:
                             if invoice["invoice_number"] not in conflicts:
                                 invoices.remove(old)
-                                issues.append({"location": f"{old['sheet']} 第{old['excel_row']}行", "message": "同一发票号码对应不同日期或金额，请核对"})
+                                issues.append({"location": f"{old['sheet']} 第{old['excel_row']}行", "invoice_number": old["invoice_number"], "message": "同一发票号码对应不同日期或金额，请核对"})
                             conflicts.add(invoice["invoice_number"])
-                            issues.append({"location": location, "message": "同一发票号码对应不同日期或金额，请核对"})
+                            issues.append({"location": location, "invoice_number": parsed_number, "message": "同一发票号码对应不同日期或金额，请核对"})
                         continue
                     seen[invoice["invoice_number"]] = invoice
                     invoices.append(invoice)
                 except (ValueError, OverflowError, TypeError) as exc:
-                    issues.append({"location": location, "message": str(exc)})
+                    issues.append({"location": location, "invoice_number": parsed_number, "message": str(exc)})
     finally:
         close()
     if not mappings:

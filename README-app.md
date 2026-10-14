@@ -4,14 +4,15 @@
 
 ## 使用
 
-Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.1-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。
+Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.3-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。
 
 macOS 14 及以上、Apple Silicon：解压 `release/InvoiceDesk-1.0.0-mac-arm64.zip`，打开“发票查验.app”。本地构建未做开发者签名；macOS 如拦截，可在“系统设置 → 隐私与安全性”允许打开。
 
 1. 选择或拖入 Excel（`.xlsx`、`.xlsm`、`.xls`）。
-2. App 显示已识别数量；有无效行或金额口径提示时，可展开查看。
+2. App 显示导入数量和逐张发票明细表；每张显示号码、Excel 位置、状态、尝试次数及最近原因。无效行显示“已跳过”及原因，可按状态筛选、翻页。
 3. 点击“开始查验”。可以暂停、继续、停止；关闭后再次打开可继续。
-4. 完成后点击“打开发票文件夹”。每张成功发票对应一个以发票号码命名的 PNG。
+4. 完成后在明细表查看已保存、平台返回结果和重试后失败的发票；100% 表示全部处理过，失败的发票仍留在表中。可点击“再次查验未完成部分”开启新一轮，已保存的发票跳过。
+5. 点击“打开发票文件夹”。每张成功发票对应一个以发票号码命名的 PNG。
 
 默认保存到用户的“文档 / 发票查验”目录，每次新任务有独立文件夹；开始前可以更改保存位置。输出目录只保留最终发票详情 PNG，没有验证码图片、失败截图或 CSV 状态表。续跑元数据仅保存在 App 的用户数据目录中。
 
@@ -29,11 +30,17 @@ macOS 14 及以上、Apple Silicon：解压 `release/InvoiceDesk-1.0.0-mac-arm64
 
 ## 重试与超时
 
-每张发票首次查验后最多自动重试 **10 次**，即最多 **11 次尝试**。OCR、验证码错误、页面加载和操作超时、JavaScript 异常未返回结果、网络错误、浏览器或引擎崩溃、最终图片保存失败都会进入统一重试。
+每张发票首次查验后最多自动重试 **2 次**，即最多 **3 次尝试**。验证码错误、页面加载和操作超时、JavaScript 异常未返回结果、网络错误、初始化完成后的浏览器或引擎崩溃、最终图片保存失败都会进入统一重试。
 
 页面导航最多30秒，常规操作最多12秒，查验结果等待最多25秒；单次尝试还有150秒硬超时。OCR/浏览器进程卡死会结束整个子进程树，再重建引擎。引擎初次启动另有90秒超时。
 
-普通异常等待2至16秒后重试；平台频控等待30秒，后续逐步延长到120秒。发票之间间隔10秒，串行查验。
+1.0.2 起，查验 worker 通过直接启动 Python / 引擎可执行文件和 JSON 管道通信，
+不再依赖 `multiprocessing spawn`。初始化完成后才计入发票尝试次数；初始化超时或失败
+会停止任务、保留诊断，可点击继续，首次初始化失败不会创建发票账本。
+旧账本中能根据诊断阶段明确识别的初始化失败预算会在恢复时重置，已成功发票保留。
+stdin 在初始化期间关闭不会判为用户取消；进入查验后控制管道关闭会停止任务并保存已有进度。
+
+普通异常两次重试分别等待2秒、4秒；平台频控分别等待30秒、60秒。发票之间间隔10秒，串行查验。
 
 平台明确返回“不一致”或“查无此票”时，将其作为最终业务结果显示，不自动重复提交。异常耗尽重试后继续处理下一张。用户可以在整批结束后主动“再次查验未完成部分”，这会为未取得发票的部分开启新一轮预算；已保存发票跳过。
 
@@ -63,9 +70,37 @@ Windows 开发时改用 `python -m venv .venv` 和 `.venv\Scripts\python.exe`。
 ```bash
 npm test           # Excel、重试恢复及真实 Chromium 页面集成测试
 npm run test:ui    # 真实 Electron 导入、进度展示、隔离及重启恢复
+npm run test:startup # 真实 Electron 管道启动、ready/result 和初始化期间关闭 stdin
 npm run dist       # 当前平台的完整 App
 npm run dist:win   # 本地 Windows x64 安装包，可在 macOS 上构建
+npm run dist:win:debug # 独立的 Windows x64 启动诊断 ZIP，可在 macOS 上构建
 ```
+
+Debug 包输出到 `release/debug/InvoiceDesk-<版本>-win-x64-debug.zip`。
+已有 `build/engine-win` 时可执行 `npm run dist:win:debug -- --reuse-engine`，
+复用运行库和浏览器，同时更新 Python 源码并重新检查 Windows 原生依赖。
+完整解压后运行 `InvoiceDesk-Debug.exe`，重新导入 Excel 开始查验；卡住后
+等待至少 60 秒，点击“打开 debug 日志”，将当前会话日志文件夹打包。
+日志位于 `%APPDATA%\发票查验 Debug\debug-logs`，每个会话独立保存，
+包含 Electron 引擎事件、各 Python 进程的导入阶段和每 30 秒的线程调用栈。
+不会记录完整协议事件或主动采集发票内容；原始 Python 调用栈可能包含安装路径。
+普通包也可通过环境变量 `INVOICE_DEBUG=1` 启用同样的诊断模式。
+
+包内 `check-startup-electron.cmd` 使用真实 Electron 父进程、`pipe` stdio、`windowsHide`
+和内嵌 isolated Python，分别验证保持 stdin 和立即关闭 stdin。每个会话生成
+`startup-probe.json`，应为 `ok: true`，父、子进程的 `isolated` 标记均为 true。
+日志在 `%LOCALAPPDATA%\InvoiceDesk-Debug-Electron-Probe`。
+`npm run test:startup` 可自动执行同样检查；设置 `INVOICE_APP_EXE` 后使用打包应用，
+Windows 打包验收已包含此回归，必须确认父子进程确实使用内嵌 isolated Python。
+
+包内 `check-startup.cmd` 可在 cmd 下单独运行直接 worker 初始化路径，无需 Excel，也不访问税务平台；
+此方式不能替代真实 Electron 父进程的回归。
+必须完整解压后从 App 根目录运行，不能直接在 ZIP 内双击脚本或单独移动脚本；
+同一层必须有 `InvoiceDesk-Debug.exe` 和 `resources` 文件夹。缺少运行库时脚本会
+显示预期路径并以退出码 2 结束，此时尚未启动 Python，不属于 OCR 初始化失败。
+脚本显示日志位置（`%LOCALAPPDATA%\InvoiceDesk-Debug-Probe`），并返回检查退出码。
+成功说明子进程、OCR 模型、Playwright 驱动和离线 Chromium 通过，不代表税务网络或完整查验已经通过。
+Debug 版使用独立的用户数据目录；反馈时只需提供日志，不用提供 `workspace.json` 或 `tasks`。
 
 `npm run dist` 创建独立的 `.venv-engine`，使用 PyInstaller 打包查验引擎并执行 OCR/浏览器自检。开发启动优先使用该独立环境。
 

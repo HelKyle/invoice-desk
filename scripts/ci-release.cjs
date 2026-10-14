@@ -26,7 +26,7 @@ async function main() {
   }
   fs.writeFileSync(path.join(directory, 'SHA256SUMS'), sums.join('\n') + '\n');
   const notes = path.resolve('release-notes.md');
-  fs.writeFileSync(notes, `main 自动构建 #${run}\n\n提交：${commit}\n\n- Windows 10/11 x64：下载 .exe 安装。\n- macOS 14+ Apple Silicon：下载 .zip 解压运行。\n- Python、OCR 模型、浏览器及 Windows C++ 运行库已内置。\n- 发布前已在 Windows 和 macOS 上执行引擎测试、运行库自检和打包版界面测试。\n- 安装包为未签名构建；SHA256SUMS 用于核对下载文件。\n\n[构建记录](https://github.com/${repository}/actions/runs/${runId})\n`);
+  fs.writeFileSync(notes, `main 自动构建 #${run}\n\n提交：${commit}\n\n- 发票明细表逐张显示状态、尝试次数、最后原因，可筛选失败及未完成发票。\n- 自动重试最多 2 次，首次查验加重试最多 3 次尝试。\n- Windows 查验 worker 改为直接启动 Python 和 JSON 管道，初始化失败不占用发票预算。\n- Windows 10/11 x64：下载 .exe 安装。\n- macOS 14+ Apple Silicon：下载 .zip 解压运行。\n- Python、OCR 模型、浏览器及 Windows C++ 运行库已内置。\n- 发布前已在 Windows 和 macOS 上执行引擎测试、真实 Electron 管道启动检查、运行库自检和打包版界面测试。\n- 安装包为未签名构建；SHA256SUMS 用于核对下载文件。\n\n[构建记录](https://github.com/${repository}/actions/runs/${runId})\n`);
   function gh(args, optional = false) {
     const result = spawnSync('gh', [...args, '--repo', repository], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
     if (result.status !== 0 && !optional) throw new Error(result.stderr || 'GitHub release 操作失败');

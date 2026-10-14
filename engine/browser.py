@@ -6,6 +6,7 @@ from pathlib import Path
 
 from invoice_batch import SITE, choose_date, recognize_captcha, refresh_captcha, read_result, save_result_screenshot
 from engine.diagnostics import failure_report, human_reason
+from engine.startup_debug import trace
 
 
 class VerificationError(Exception):
@@ -17,8 +18,12 @@ class BrowserEngine:
         self.notify = notify
         self.stage = "正在加载 OCR 运行库"
         self.notify(self.stage)
+        trace("ddddocr-import-begin")
         import ddddocr
+        trace("ddddocr-import-end")
+        trace("playwright-import-begin")
         from playwright.sync_api import sync_playwright
+        trace("playwright-import-end")
         if models is not None:
             self.models = models
         else:
@@ -38,6 +43,7 @@ class BrowserEngine:
 
     def update_stage(self, message):
         self.stage = message
+        trace("browser-stage", message=message)
         self.notify(message)
 
     def prepare(self, row):
@@ -157,6 +163,7 @@ class BrowserEngine:
 
 
 def worker(connection):
+    trace("worker-entered")
     engine = None
     last_stage = "正在启动查验子进程"
     def notify(message):
@@ -165,16 +172,29 @@ def worker(connection):
         connection.send({"type": "stage", "message": message})
     try:
         engine = BrowserEngine(notify)
-        connection.send({"type": "ready"})
+        trace("worker-ready")
+        import sys
+        connection.send({"type": "ready", "isolated": bool(sys.flags.isolated), "transport": "stdio"})
         while True:
             request = connection.recv()
             if request["command"] == "close":
                 break
+            if request["command"] == "probe":
+                # Offline browser + OCR check also exercises the ready/request/result pipe.
+                notify("正在执行离线浏览器自检")
+                page = engine.prepare({"id": "startup-probe"})
+                page.set_content("<title>invoice worker ready</title>")
+                screenshot = page.screenshot()
+                for model in engine.models:
+                    model.classification(screenshot)
+                connection.send({"type": "result", "result": {"browser": True, "models": 2}})
+                continue
             result = engine.verify(request["invoice"], request["output"])
             connection.send({"type": "result", "result": result})
     except (EOFError, BrokenPipeError):
         pass
     except Exception as exc:
+        trace("worker-error", error_type=type(exc).__name__, message=str(exc), stage=last_stage)
         try:
             connection.send({"type": "error", "message": human_reason(exc, f"{last_stage}失败，可复制诊断信息查看原因"), "diagnostic": failure_report(exc, last_stage)})
         except (EOFError, BrokenPipeError):

@@ -38,10 +38,15 @@
           <div class="current-status" aria-live="polite"><span id="activity-dot" class="activity-dot"></span><div><strong id="status-title">发票列表已就绪</strong><p id="status-description">点击开始，自动完成查验。</p></div><span id="retry-badge" class="retry-badge" hidden></span></div>
           <details id="failure-details" class="failure-details" hidden><summary id="failure-summary"></summary><ul id="failure-list"></ul></details>
         </div>
-        <div class="workspace-footer"><span class="automatic-note"><span aria-hidden="true">✦</span> 自动识别验证码 · 异常最多重试 10 次</span><div class="actions"><button id="stop-button" class="button button-quiet" hidden>停止</button><button id="pause-button" class="button button-secondary" hidden>暂停</button><button id="start-button" class="button button-primary" disabled>开始查验 <span aria-hidden="true">→</span></button></div></div>
+        <div class="workspace-footer"><span class="automatic-note"><span aria-hidden="true">✦</span><span id="retry-note">自动识别验证码 · 异常最多重试 2 次</span></span><div class="actions"><button id="stop-button" class="button button-quiet" hidden>停止</button><button id="pause-button" class="button button-secondary" hidden>暂停</button><button id="start-button" class="button button-primary" disabled>开始查验 <span aria-hidden="true">→</span></button></div></div>
+      </section>
+      <section id="invoice-card" class="invoice-card" aria-labelledby="invoice-table-title" hidden>
+        <div class="invoice-table-header"><div><h2 id="invoice-table-title">发票明细</h2><p id="invoice-table-summary"></p></div><label class="invoice-filter">显示<select id="invoice-filter" aria-label="筛选发票状态"><option value="all">全部</option><option value="unfinished">未完成</option><option value="failed">重试后失败</option><option value="rejected">平台返回不一致 / 无此票</option><option value="success">已保存</option><option value="skipped">已跳过</option></select></label></div>
+        <div class="invoice-table-scroll"><table class="invoice-table"><thead><tr><th scope="col">序号</th><th scope="col">发票号码</th><th scope="col">Excel 位置</th><th scope="col">状态</th><th scope="col">尝试次数</th><th scope="col">进度 / 最近原因</th></tr></thead><tbody id="invoice-table-body"></tbody></table></div>
+        <div class="invoice-table-footer"><span id="invoice-page-label"></span><div><button id="invoice-prev" class="text-button">上一页</button><button id="invoice-next" class="text-button">下一页</button></div></div>
       </section>
       <section class="output-card"><div class="output-symbol" aria-hidden="true">↳</div><div class="output-info"><h2>只留下你需要的发票</h2><p id="output-description">完成后仅保存发票详情图片。验证码、失败截图和中间表均不导出。</p></div><button id="output-button" class="text-button" disabled>打开发票文件夹 ↗</button><button id="choose-output" class="text-button" hidden>更改位置</button></section>
-      <footer class="bottom-note"><span>Excel 和验证码识别均在本机处理；查验信息提交至税务平台。</span><button id="copy-diagnostics" class="text-button" hidden>复制诊断信息</button><span id="app-version">Invoice Desk</span></footer>
+      <footer class="bottom-note"><span>Excel 和验证码识别均在本机处理；查验信息提交至税务平台。</span><button id="copy-diagnostics" class="text-button" hidden>复制诊断信息</button><button id="open-diagnostics" class="text-button" hidden>打开 debug 日志</button><span id="app-version">Invoice Desk</span></footer>
     </main>
   </div>
   <script src="renderer.js"></script>

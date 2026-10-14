@@ -4,9 +4,16 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { launchEngine } = require('./engine-client.cjs');
 const { report } = require('./diagnostics.cjs');
+const { createDebugLog } = require('./debug-log.cjs');
+const { startupProbe } = require('./startup-probe.cjs');
 
+const startupProbeMode = process.argv.includes('--startup-test') || process.argv.includes('--startup-test-close-stdin');
+const debugEnabled = require('../package.json').invoiceDebug === true || process.env.INVOICE_DEBUG === '1';
+app.setName(debugEnabled ? '发票查验 Debug' : '发票查验');
 if (process.env.INVOICE_APP_DATA) app.setPath('userData', process.env.INVOICE_APP_DATA);
-app.setName('发票查验');
+else if (debugEnabled) app.setPath('userData', path.join(app.getPath('appData'), '发票查验 Debug'));
+const debugLog = createDebugLog(debugEnabled || startupProbeMode ? path.join(app.getPath('userData'), 'debug-logs', new Date().toISOString().replace(/[:.]/g, '-')) : null);
+debugLog.write('app-start', { version: app.getVersion(), platform: process.platform, architecture: process.arch, packaged: app.isPackaged });
 let window;
 let engine;
 let importing = false;
@@ -15,15 +22,36 @@ let persistQueue = Promise.resolve();
 let state = { phase: 'empty', import: null, progress: null, task: null, message: '', failures: [] };
 const root = path.join(__dirname, '..');
 const entryURL = pathToFileURL(path.join(__dirname, 'index.html')).href;
-const config = { packaged: app.isPackaged, resourcesPath: process.resourcesPath, root };
+const config = { packaged: app.isPackaged, resourcesPath: process.resourcesPath, root, debugLog };
 const stateFile = () => path.join(app.getPath('userData'), 'workspace.json');
-const singleInstance = app.requestSingleInstanceLock();
+const singleInstance = startupProbeMode || app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.focus(); } });
 
 function snapshot() {
   const { source, ledger, ...visibleTask } = state.task || {};
-  return { ...state, version: app.getVersion(), task: state.task ? visibleTask : null, busy: importing || Boolean(engine) };
+  return { ...state, version: app.getVersion(), retryLimit: state.import?.retry_limit ?? 2, debug: debugEnabled, task: state.task ? visibleTask : null, busy: importing || Boolean(engine) };
+}
+
+function settleInterruptedRows() {
+  for (const row of Object.values(state.invoiceStates || {})) {
+    if (row.kind === 'checking') { row.kind = 'pending'; row.reason = '上次查验已中断，继续后重新尝试'; }
+  }
+}
+
+async function restoreInvoiceStates() {
+  state.invoiceStates ||= {};
+  if (state.task?.ledger) {
+    try {
+      const ledger = JSON.parse(await fs.readFile(state.task.ledger, 'utf8'));
+      if (ledger.fingerprint === state.task.fingerprint) {
+        state.invoiceStates = Object.fromEntries(Object.entries(ledger.items || {}).map(([id, record]) => [id, {
+          kind: record.kind || 'pending', attempts: record.attempts || 0, reason: record.reason || '',
+        }]));
+      }
+    } catch {}
+  }
+  settleInterruptedRows();
 }
 
 function publish(persist = true) {
@@ -52,7 +80,7 @@ function handle(channel, action) {
   ipcMain.handle(channel, async (event, ...args) => {
     assertSender(event);
     try { return await action(...args); }
-    catch (error) { publish(false); return { error: error.message || '操作失败，请重试' }; }
+    catch (error) { debugLog.write('action-error', { channel, error_type: error.name, message: error.message }); publish(false); return { error: error.message || '操作失败，请重试' }; }
   });
 }
 
@@ -81,12 +109,14 @@ async function importExcel(source) {
     state.phase = imported.total ? 'ready' : 'invalid';
     if (previous?.fingerprint === imported.fingerprint) {
       state.task.source = source;
-      state.phase = state.progress?.completed === imported.total ? 'finished' : 'stopped';
+      state.phase = imported.total ? (state.progress?.completed === imported.total ? 'finished' : 'stopped') : 'invalid';
     } else {
       state.failures = [];
+      state.invoiceStates = {};
       state.task = { source, fingerprint: imported.fingerprint, output: null, ledger: null };
       state.progress = { total: imported.total, completed: 0, success: 0, rejected: 0, failed: 0 };
     }
+    await restoreInvoiceStates();
     return snapshot();
   } finally {
     if (engine === client) engine = null;
@@ -119,6 +149,7 @@ async function start(resetFailed = false) {
     const result = await checker.completion;
     if (result.code !== 0 || !checked) throw new Error(importError || '无法读取 Excel，请重新导入');
     if (checked.fingerprint !== state.task.fingerprint) throw new Error('Excel 内容已修改，请重新导入文件');
+    state.import = checked;
   } finally { engine = null; importing = false; }
   await fs.mkdir(state.task.output, { recursive: true });
   await fs.access(state.task.output, require('node:fs').constants.W_OK);
@@ -137,9 +168,17 @@ async function start(resetFailed = false) {
   const client = launchEngine(config, args, event => {
     switch (event.type) {
       case 'heartbeat': return;
-      case 'stage': state.message = event.message; state.waiting = null; break;
+      case 'task-state': state.invoiceStates = event.items || {}; state.progress = pickProgress(event); break;
+      case 'item-state':
+        state.invoiceStates ||= {};
+        state.invoiceStates[event.id] = { kind: event.kind, attempts: event.attempts, reason: event.reason };
+        break;
+      case 'stage':
+        state.message = event.message; state.waiting = null;
+        if (state.current?.id && state.invoiceStates?.[state.current.id]?.kind === 'checking') state.invoiceStates[state.current.id].reason = event.message;
+        break;
       case 'invoice':
-        state.current = { number: event.number, index: event.index, retry: event.retry };
+        state.current = { id: event.id, number: event.number, index: event.index, retry: event.retry };
         state.progress = pickProgress(event); state.waiting = null; state.message = '正在查验发票'; break;
       case 'retry':
         state.message = event.reason;
@@ -156,8 +195,9 @@ async function start(resetFailed = false) {
         finished = true;
         state.progress = pickProgress(event); state.failures = event.failures || [];
         state.phase = event.cancelled ? 'stopped' : 'finished';
+        if (event.cancelled) settleInterruptedRows();
         state.current = null; state.waiting = null; state.message = ''; break;
-      case 'error': state.phase = 'stopped'; state.message = event.message; state.waiting = null; break;
+      case 'error': state.phase = 'stopped'; state.message = event.message; state.diagnostic = event.diagnostic || state.diagnostic; state.waiting = null; break;
       default: return;
     }
     publish(event.type !== 'waiting' && event.type !== 'stage');
@@ -173,6 +213,7 @@ async function start(resetFailed = false) {
     state.phase = 'stopped'; state.message = error.message;
   }).finally(() => {
     if (engine === client) engine = null;
+    settleInterruptedRows();
     state.waiting = null;
     publish();
   });
@@ -196,6 +237,12 @@ async function stop() {
 
 app.whenReady().then(async () => {
   if (!singleInstance) return;
+  if (startupProbeMode) {
+    const result = await startupProbe(config, process.argv.includes('--startup-test-close-stdin'));
+    await fs.writeFile(path.join(debugLog.directory, 'startup-probe.json'), JSON.stringify(result, null, 2), 'utf8');
+    app.exit(result.ok ? 0 : 1);
+    return;
+  }
   try {
     const restored = JSON.parse(await fs.readFile(stateFile(), 'utf8'));
     if (restored.task && restored.import && restored.progress) state = restored;
@@ -204,8 +251,25 @@ app.whenReady().then(async () => {
     }
     state.waiting = null; state.current = null;
   } catch {}
+  if (state.task?.source && !Array.isArray(state.import?.invoices)) {
+    let restoredImport;
+    try {
+      const inspector = launchEngine(config, ['inspect', '--input', state.task.source], event => { if (event.type === 'imported') restoredImport = event; });
+      engine = inspector; importing = true;
+      const result = await inspector.completion;
+      if (result.code === 0 && restoredImport?.fingerprint === state.task.fingerprint) state.import = restoredImport;
+      else { state.phase = 'stopped'; state.message = '请重新导入原 Excel，以查看每张发票的明细和已保存进度。'; }
+    } finally { engine = null; importing = false; }
+  }
+  await restoreInvoiceStates();
   handle('workspace:get', () => snapshot());
   handle('diagnostics:copy', () => { clipboard.writeText(report(state, app.getVersion())); return { copied: true }; });
+  handle('diagnostics:open', async () => {
+    if (!debugLog.directory) throw new Error('请使用 debug 包打开日志');
+    const error = await shell.openPath(debugLog.directory);
+    if (error) throw new Error('无法打开 debug 日志文件夹');
+    return null;
+  });
   handle('excel:choose', async () => {
     if (engine || importing) throw new Error('请先停止当前任务');
     const result = await dialog.showOpenDialog(window, { title: '导入发票 Excel', properties: ['openFile'], filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm', 'xls'] }] });
@@ -232,7 +296,7 @@ app.whenReady().then(async () => {
     return null;
   });
   window = new BrowserWindow({
-    width: 1060, height: 900, minWidth: 850, minHeight: 660, title: '发票查验', backgroundColor: '#f6f7f4',
+    width: 1060, height: 900, minWidth: 850, minHeight: 660, title: debugEnabled ? '发票查验 Debug' : '发票查验', backgroundColor: '#f6f7f4',
     autoHideMenuBar: true, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -248,7 +312,13 @@ app.whenReady().then(async () => {
       stop().finally(() => { engine?.kill(); app.quit(); });
     }
   });
-}).catch(error => { dialog.showErrorBox('无法打开应用', error.message); app.quit(); });
+}).catch(async error => {
+  debugLog.write('app-error', { error_type: error.name, message: error.message });
+  if (startupProbeMode) {
+    try { await fs.writeFile(path.join(debugLog.directory, 'startup-probe.json'), JSON.stringify({ ok: false, error: error.message }, null, 2), 'utf8'); } catch {}
+    app.exit(1);
+  } else { dialog.showErrorBox('无法打开应用', error.message); app.quit(); }
+});
 
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', event => {
@@ -263,4 +333,4 @@ app.on('before-quit', event => {
     }
   } else if (engine) engine.kill();
 });
-process.on('exit', () => engine?.kill());
+process.on('exit', () => { debugLog.write('app-exit'); engine?.kill(); });

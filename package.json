@@ -1,6 +1,6 @@
 {
   "name": "invoice-desk",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "导入 Excel，自动查验数电发票，只保留最终发票详情",
   "author": "Invoice Desk",
   "license": "UNLICENSED",
@@ -11,11 +11,13 @@
     "dev": "electron .",
     "test": "node scripts/test.cjs",
     "test:ui": "node scripts/ui-smoke.cjs",
+    "test:startup": "node scripts/startup-smoke.cjs",
     "engine:build": "node scripts/build-engine.cjs",
     "build": "node scripts/package.cjs --dir",
     "dist": "node scripts/package.cjs",
     "engine:build:win": "node scripts/build-windows.cjs",
-    "dist:win": "npm run engine:build:win && electron-builder --win --x64 --publish never"
+    "dist:win": "npm run engine:build:win && electron-builder --win --x64 --publish never",
+    "dist:win:debug": "node scripts/build-debug-windows.cjs"
   },
   "devDependencies": {
     "electron": "44.7.0",
@@ -26,12 +28,53 @@
     "appId": "local.invoice.desk",
     "productName": "发票查验",
     "asar": true,
-    "directories": {"output": "release", "buildResources": "build"},
-    "files": ["desktop/**/*", "package.json"],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
     "afterPack": "scripts/verify-package.cjs",
-    "mac": {"target": ["zip"], "category": "public.app-category.finance", "identity": null, "extraResources": [{"from": "build/engine/invoice-engine", "to": "engine"}]},
-    "win": {"target": [{"target": "nsis", "arch": ["x64"]}], "signAndEditExecutable": false, "extraResources": [{"from": "build/engine-win", "to": "engine"}]},
-    "nsis": {"oneClick": true, "perMachine": false, "allowElevation": false, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "发票查验"},
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "category": "public.app-category.finance",
+      "identity": null,
+      "extraResources": [
+        {
+          "from": "build/engine/invoice-engine",
+          "to": "engine"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "build/engine-win",
+          "to": "engine"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "发票查验"
+    },
     "artifactName": "InvoiceDesk-${version}-${os}-${arch}.${ext}"
   }
 }

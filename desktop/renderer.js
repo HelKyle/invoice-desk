@@ -4,11 +4,62 @@ const $ = id => document.getElementById(id);
 let state;
 let actionPending = false;
 let notice = '';
+let invoicePage = 0;
+let invoiceFilter = 'all';
+let invoiceIdentity;
+const invoicePageSize = 50;
 
 function text(id, value) { $(id).textContent = value; }
 function show(id, visible) { $(id).hidden = !visible; }
 
+function renderInvoiceTable(next) {
+  const imported = next.import;
+  show('invoice-card', Boolean(imported));
+  if (!imported) return;
+  if (invoiceIdentity !== imported.fingerprint) {
+    invoiceIdentity = imported.fingerprint; invoicePage = 0; invoiceFilter = 'all'; $('invoice-filter').value = 'all';
+  }
+  const labels = { pending: '待查验', checking: '查验中', retry: '待重试', success: '已保存', rejected: '平台返回结果', failed: '重试后失败', skipped: '已跳过' };
+  const rows = (imported.invoices || []).map((invoice, index) => ({
+    number: invoice.invoice_number, location: `${invoice.sheet} 第${invoice.excel_row}行`, index: index + 1,
+    kind: next.invoiceStates?.[invoice.id]?.kind || 'pending', attempts: next.invoiceStates?.[invoice.id]?.attempts || 0,
+    reason: next.invoiceStates?.[invoice.id]?.reason || '',
+  }));
+  const counts = kind => rows.filter(row => row.kind === kind).length;
+  const issues = imported.issues || [];
+  text('invoice-table-summary', `导入 ${imported.total} 张 · ${counts('success')} 已保存 · ${counts('failed')} 重试后失败 · ${counts('rejected')} 平台结果${issues.length ? ` · ${issues.length} 行已跳过` : ''}${imported.duplicates ? ` · ${imported.duplicates} 条重复已合并` : ''}`);
+  rows.push(...issues.map((issue, index) => ({ number: issue.invoice_number || '—', location: issue.location,
+    index: rows.length + index + 1, kind: 'skipped', attempts: 0, reason: issue.message })));
+  const filtered = rows.filter(row => invoiceFilter === 'all' || (invoiceFilter === 'unfinished' ? !['success', 'skipped'].includes(row.kind) : row.kind === invoiceFilter));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / invoicePageSize));
+  invoicePage = Math.min(invoicePage, pageCount - 1);
+  const visible = filtered.slice(invoicePage * invoicePageSize, (invoicePage + 1) * invoicePageSize);
+  const elements = visible.map(row => {
+    const tr = document.createElement('tr');
+    tr.dataset.status = row.kind;
+    const statusLabel = row.kind === 'rejected' ? row.reason || labels.rejected : labels[row.kind] || '待查验';
+    for (const [index, value] of [row.index, row.number, row.location, statusLabel, row.attempts, row.reason || (row.kind === 'success' ? '已保存发票详情' : '—')].entries()) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      if (index === 1) td.className = 'invoice-number';
+      if (index === 3) td.className = `invoice-status ${Object.hasOwn(labels, row.kind) ? row.kind : 'pending'}`;
+      tr.append(td);
+    }
+    return tr;
+  });
+  if (!elements.length) {
+    const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 6;
+    td.className = 'invoice-empty'; td.textContent = imported.total && !imported.invoices ? '请重新导入原 Excel，已有进度将保留。' : '没有符合此状态的发票';
+    tr.append(td); elements.push(tr);
+  }
+  $('invoice-table-body').replaceChildren(...elements);
+  text('invoice-page-label', `共 ${filtered.length} 条 · 第 ${invoicePage + 1} / ${pageCount} 页`);
+  $('invoice-prev').disabled = invoicePage === 0;
+  $('invoice-next').disabled = invoicePage + 1 >= pageCount;
+}
+
 function render(next) {
+  const previousPhase = state?.phase;
   state = next;
   const imported = next.import;
   const progress = next.progress || { total: 0, completed: 0, success: 0, failed: 0, rejected: 0 };
@@ -16,7 +67,9 @@ function render(next) {
   const finished = next.phase === 'finished';
   const percentage = progress.total ? Math.round(progress.completed / progress.total * 100) : 0;
   show('notice', Boolean(notice)); text('notice', notice);
-  text('app-version', `Invoice Desk · ${next.version || '1.0.1'}`);
+  text('app-version', `Invoice Desk · ${next.version || '1.0.3'}${next.debug ? ' · Debug' : ''}`);
+  show('open-diagnostics', next.debug === true);
+  text('retry-note', `自动识别验证码 · 异常最多重试 ${next.retryLimit ?? 2} 次（共 ${(next.retryLimit ?? 2) + 1} 次尝试）`);
   show('copy-diagnostics', Boolean(next.diagnostic || next.engineStderr || next.phase === 'stopped' || running));
   text('file-title', imported?.filename || '导入你的发票 Excel');
   text('file-description', imported ? `已识别 ${imported.total} 张可查验发票${imported.duplicates ? ` · 已合并 ${imported.duplicates} 条重复记录` : ''}` : '拖入文件，或点击右侧选择。支持 .xlsx、.xlsm、.xls');
@@ -34,14 +87,14 @@ function render(next) {
     }));
   }
   const labels = { empty: '等待导入', invalid: '请检查 Excel', ready: '已就绪', running: '自动查验中', paused: '已暂停', stopping: '正在停止', stopped: '可继续查验', finished: '本次查验完成' };
-  text('phase-badge', labels[next.phase] || '等待导入');
+  text('phase-badge', finished && (progress.failed || progress.rejected) ? '本轮结束 · 有未完成' : labels[next.phase] || '等待导入');
   $('phase-badge').className = `phase-badge ${running ? 'running' : finished ? 'finished' : ''}`;
   show('empty-panel', !imported?.total);
   show('progress-panel', Boolean(imported?.total));
   for (const key of ['total', 'completed', 'success', 'rejected', 'failed']) text(key, progress[key] || 0);
   text('percentage', `${percentage}%`);
   $('progress-bar').value = percentage;
-  text('progress-caption', finished ? '本次已处理' : '已处理发票');
+  text('progress-caption', finished && (progress.failed || progress.rejected) ? '本轮已处理（含未完成）' : finished ? '本次已处理' : '已处理发票');
   let title = '发票列表已就绪';
   let description = '点击开始，自动完成查验。';
   if (next.current) {
@@ -56,18 +109,19 @@ function render(next) {
     description = next.message || '继续时会跳过已保存的发票，接着处理未完成的部分。';
   } else if (finished) {
     title = progress.success === progress.total ? '全部发票已收好' : `已保存 ${progress.success} 张发票`;
-    description = progress.rejected || progress.failed ? `${progress.rejected} 张返回不一致或查无此票，${progress.failed} 张因异常未完成。可查看原因或再次查验未完成部分。` : '打开文件夹即可查看，保存的都是最终发票详情图片。';
+    description = progress.rejected || progress.failed ? `${progress.rejected} 张返回不一致或查无此票，${progress.failed} 张重试后仍未完成。下方明细保留每张状态和原因，可筛选后再次查验未完成部分。` : '打开文件夹即可查看，保存的都是最终发票详情图片。';
   }
   if (next.phase === 'paused') { title = '任务已暂停'; description = '当前发票处理完后暂停，点击继续即可恢复。'; }
   text('status-title', title); text('status-description', description);
   $('activity-dot').className = `activity-dot ${next.phase === 'running' ? 'active' : ''}`;
   show('retry-badge', Boolean(next.current?.retry));
-  text('retry-badge', `重试 ${next.current?.retry || 0}/10`);
+  text('retry-badge', `重试 ${next.current?.retry || 0}/${next.retryLimit ?? 2}`);
   const failures = next.failures || [];
-  show('failure-details', failures.length > 0);
+  show('failure-details', failures.length > 0 && !imported?.invoices?.length);
+  if (finished && failures.length && previousPhase !== 'finished') $('failure-details').open = true;
   text('failure-summary', `查看 ${failures.length} 张未取得发票的原因`);
   $('failure-list').replaceChildren(...failures.map(failure => {
-    const li = document.createElement('li'); li.textContent = `${failure.number} · ${failure.location} · ${failure.reason}`; return li;
+    const li = document.createElement('li'); li.textContent = `${failure.number} · ${failure.location} · ${failure.reason}${failure.attempts ? ` · 已尝试 ${failure.attempts} 次` : ''}`; return li;
   }));
   show('stop-button', running); $('stop-button').disabled = next.phase === 'stopping' || actionPending;
   show('pause-button', running && next.phase !== 'stopping');
@@ -79,6 +133,7 @@ function render(next) {
   $('output-button').disabled = !next.task?.output || !progress.success;
   show('choose-output', next.phase === 'ready'); $('choose-output').disabled = actionPending || next.busy;
   text('output-description', next.task?.output ? `最终发票保存至：${next.task.output}` : '完成后仅保存发票详情图片。验证码、失败截图和中间表均不导出。');
+  renderInvoiceTable(next);
 }
 
 async function action(fn) {
@@ -103,6 +158,10 @@ $('pause-button').addEventListener('click', () => action(() => state.phase === '
 $('stop-button').addEventListener('click', () => action(() => api.stop()));
 $('output-button').addEventListener('click', () => action(() => api.openOutput()));
 $('choose-output').addEventListener('click', () => action(() => api.chooseOutput()));
+$('open-diagnostics').addEventListener('click', () => action(() => api.openDiagnostics()));
+$('invoice-filter').addEventListener('change', event => { invoiceFilter = event.target.value; invoicePage = 0; if (state) renderInvoiceTable(state); });
+$('invoice-prev').addEventListener('click', () => { invoicePage = Math.max(0, invoicePage - 1); if (state) renderInvoiceTable(state); });
+$('invoice-next').addEventListener('click', () => { invoicePage += 1; if (state) renderInvoiceTable(state); });
 $('copy-diagnostics').addEventListener('click', () => action(async () => {
   const result = await api.copyDiagnostics();
   if (result?.copied) notice = '诊断信息已复制，可粘贴给开发者；不含发票内容和验证码。';
