@@ -14,6 +14,13 @@ const { report } = require('../desktop/diagnostics.cjs');
   const setup = spawnSync(python, ['-c', 'from openpyxl import Workbook; import sys; w=Workbook(); s=w.active; s.append(["报销列表"]); s.append(["发票号", "日期", "价税合计（元）"]); s.append(["00000000000000000001", "2026-01-23", 1234.56]); w.save(sys.argv[1])', workbook]);
   assert.equal(setup.status, 0, setup.stderr.toString());
   const launchOptions = { args: process.env.INVOICE_APP_EXE ? [] : [root], env: { ...process.env, INVOICE_APP_DATA: directory }, timeout: 30000 };
+  if (process.env.CI && process.platform === 'win32' && !process.env.INVOICE_APP_EXE) {
+    const tracing = path.join(directory, 'bootstrap-tracing');
+    await fs.mkdir(tracing);
+    await fs.writeFile(path.join(tracing, 'sitecustomize.py'), `import faulthandler, os, sys\ntrace = open(os.path.join(os.environ['INVOICE_TRACE_DIRECTORY'], 'worker-' + str(os.getpid()) + '.log'), 'w')\ntrace.write('Python interpreter initialized: ' + sys.executable + '\\n')\ntrace.flush()\nfaulthandler.dump_traceback_later(15, file=trace)\n`);
+    launchOptions.env.PYTHONPATH = tracing;
+    launchOptions.env.INVOICE_TRACE_DIRECTORY = tracing;
+  }
   if (process.env.INVOICE_APP_EXE) launchOptions.executablePath = process.env.INVOICE_APP_EXE;
   const app = await electron.launch(launchOptions);
   const errors = [];
@@ -77,6 +84,11 @@ const { report } = require('../desktop/diagnostics.cjs');
     } finally { await reopened.close(); }
     console.log('Electron 界面、实际 Excel 导入、进度展示、隔离与重启恢复检查通过。');
   } catch (error) {
+    if (launchOptions.env.INVOICE_TRACE_DIRECTORY) {
+      for (const name of await fs.readdir(launchOptions.env.INVOICE_TRACE_DIRECTORY)) {
+        if (name.endsWith('.log')) console.error(await fs.readFile(path.join(launchOptions.env.INVOICE_TRACE_DIRECTORY, name), 'utf8'));
+      }
+    }
     if (page && !page.isClosed()) {
       try {
         const failedState = await page.evaluate(() => window.invoiceDesk.getState());

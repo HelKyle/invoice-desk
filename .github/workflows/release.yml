@@ -52,8 +52,6 @@ jobs:
       - name: Test invoice engine
         run: npm test
       - name: Test Electron UI and worker startup
-        env:
-          INVOICE_TRACE_WORKER_BOOTSTRAP: '1'
         run: npm run test:ui
       - name: Build standalone app and check runtime
         run: npm run ${{ matrix.command }}
