@@ -1,0 +1,27 @@
+# Invoice Desk · 发票查验
+
+本地 Electron 桌面应用：导入 Excel，自动识别表头和20位数电发票列表，逐张查验并保存税务平台返回的最终发票详情图片。
+
+- 支持 `.xlsx`、`.xlsm`、`.xls`，自动识别常见号码、日期及含税金额表头。
+- 本地双模型 OCR，界面展示进度，异常最多自动重试10次。
+- 支持暂停、停止和断点续跑，输出目录只保留最终 PNG。
+- 安装包内置 Python、OCR 模型、浏览器与 Windows C++ 运行库。
+
+## 下载与使用
+
+从本仓库的 [Releases](https://github.com/HelKyle/invoice-desk/releases) 下载：
+
+- Windows 10/11 x64：运行 `.exe` 安装后打开“发票查验”。
+- macOS 14+ Apple Silicon：解压 `.zip`，打开“发票查验.app”。
+
+导入 Excel，点击“开始查验”，完成后打开保存文件夹即可。号码应为文本，金额应为价税合计。遇到启动异常，可在 App 底部复制诊断信息。
+
+详细使用与本地开发说明见 [README-app.md](README-app.md)。
+
+## 自动发布
+
+每次 push 到 `main`，GitHub Actions 在 Windows x64 和 macOS arm64 上运行测试、构建、运行库自检及打包版界面检查。两端全部成功后，自动发布独立的 GitHub Release，附带安装包和 SHA-256 校验文件。
+
+标签格式：`v<版本>-main.<构建号>-<提交短哈希>`。手动重跑同一次构建会更新同一个 Release；旧提交的构建不会抢占最新提交的 Latest 标记。也可以在 Actions 页面手动运行工作流。
+
+源码仓库不包含真实发票、Excel、业务数据、历史截图或本地构建产物。测试使用人工构造的数据，CI 不依赖真实发票文件。

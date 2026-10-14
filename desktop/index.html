@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
+  <title>发票查验</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" aria-label="发票查验首页"><span class="brand-mark">票</span><span>发票查验<small>INVOICE DESK</small></span></a>
+      <span class="local-badge"><span class="status-dot"></span>本地识别 · 自动查验</span>
+    </header>
+    <main>
+      <div class="intro"><div><p class="eyebrow">把重复的工作交给票夹</p><h1>一份 Excel，收好每张发票。</h1><p class="subtitle">自动识别表头，逐张查验。保存税务平台返回的最终发票详情。</p></div><span class="edition">数电发票<small>20 位发票号码</small></span></div>
+      <div id="notice" class="notice" role="alert" hidden></div>
+      <section id="drop-zone" class="import-card" aria-label="导入 Excel">
+        <div class="file-icon" aria-hidden="true"><svg width="32" height="36" viewBox="0 0 32 36" fill="none"><path d="M7 2h13l7 7v23H7V2Z" stroke="currentColor" stroke-width="1.8"/><path d="M20 2v8h7M12 17h10M12 23h10M12 29h6" stroke="currentColor" stroke-width="1.8"/></svg></div>
+        <div class="file-info"><h2 id="file-title">导入你的发票 Excel</h2><p id="file-description">拖入文件，或点击右侧选择。支持 .xlsx、.xlsm、.xls</p></div>
+        <button id="import-button" class="button button-secondary">选择 Excel<span aria-hidden="true">↗</span></button>
+      </section>
+      <div id="import-details" class="import-details" hidden>
+        <p id="mapping-description"></p>
+        <details id="import-issues" hidden><summary id="issues-summary"></summary><div id="issues-content"></div></details>
+      </div>
+      <section class="workspace" aria-labelledby="progress-title">
+        <div class="workspace-header"><h2 id="progress-title">查验进度</h2><span id="phase-badge" class="phase-badge">等待导入</span></div>
+        <div id="empty-panel" class="empty-panel">
+          <svg class="invoice-illustration" width="138" height="116" viewBox="0 0 138 116" fill="none" aria-hidden="true"><rect x="29" y="14" width="82" height="96" rx="9" fill="#E5EBE2" transform="rotate(8 29 14)"/><rect x="21" y="5" width="82" height="96" rx="9" fill="#FFF" stroke="#D5DED1"/><rect x="32" y="17" width="27" height="8" rx="3" fill="#B9CFAB"/><path d="M32 39h59M32 50h59M32 61h34M32 83h24" stroke="#DEE5DA" stroke-width="4" stroke-linecap="round"/><circle cx="99" cy="85" r="22" fill="#236B45"/><path d="m90 85 6 6 12-13" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>准备好，就交给我们。</h3><p>识别发票列表、自动查验、保存最终发票<br>无需整理中间表，也不用手动处理验证码。</p>
+        </div>
+        <div id="progress-panel" hidden>
+          <div class="progress-overview"><div><span id="progress-caption" class="muted">准备查验</span><div class="progress-number"><strong id="completed">0</strong><span>/ <span id="total">0</span> 张</span></div></div><span id="percentage" class="percentage">0%</span></div>
+          <progress id="progress-bar" max="100" value="0" aria-label="发票查验完成进度"></progress>
+          <div class="metrics"><div><span class="metric-dot green"></span><span>已保存发票</span><strong id="success">0</strong></div><div><span class="metric-dot amber"></span><span>信息不一致 / 无此票</span><strong id="rejected">0</strong></div><div><span class="metric-dot gray"></span><span>暂未完成</span><strong id="failed">0</strong></div></div>
+          <div class="current-status" aria-live="polite"><span id="activity-dot" class="activity-dot"></span><div><strong id="status-title">发票列表已就绪</strong><p id="status-description">点击开始，自动完成查验。</p></div><span id="retry-badge" class="retry-badge" hidden></span></div>
+          <details id="failure-details" class="failure-details" hidden><summary id="failure-summary"></summary><ul id="failure-list"></ul></details>
+        </div>
+        <div class="workspace-footer"><span class="automatic-note"><span aria-hidden="true">✦</span> 自动识别验证码 · 异常最多重试 10 次</span><div class="actions"><button id="stop-button" class="button button-quiet" hidden>停止</button><button id="pause-button" class="button button-secondary" hidden>暂停</button><button id="start-button" class="button button-primary" disabled>开始查验 <span aria-hidden="true">→</span></button></div></div>
+      </section>
+      <section class="output-card"><div class="output-symbol" aria-hidden="true">↳</div><div class="output-info"><h2>只留下你需要的发票</h2><p id="output-description">完成后仅保存发票详情图片。验证码、失败截图和中间表均不导出。</p></div><button id="output-button" class="text-button" disabled>打开发票文件夹 ↗</button><button id="choose-output" class="text-button" hidden>更改位置</button></section>
+      <footer class="bottom-note"><span>Excel 和验证码识别均在本机处理；查验信息提交至税务平台。</span><button id="copy-diagnostics" class="text-button" hidden>复制诊断信息</button><span id="app-version">Invoice Desk</span></footer>
+    </main>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>
