@@ -1,6 +1,6 @@
 {
   "name": "invoice-desk",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "导入 Excel，自动查验数电及旧版发票，只保留最终发票详情",
   "author": "Invoice Desk",
   "license": "UNLICENSED",
@@ -42,13 +42,14 @@
         "zip"
       ],
       "category": "public.app-category.finance",
-      "identity": null,
+      "identity": "-",
       "extraResources": [
         {
           "from": "build/engine/invoice-engine",
           "to": "engine"
         }
-      ]
+      ],
+      "hardenedRuntime": false
     },
     "win": {
       "target": [
@@ -75,6 +76,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "发票查验"
     },
-    "artifactName": "InvoiceDesk-${version}-${os}-${arch}.${ext}"
+    "artifactName": "InvoiceDesk-${version}-${os}-${arch}.${ext}",
+    "afterSign": "scripts/verify-mac-signature.cjs"
   }
 }
