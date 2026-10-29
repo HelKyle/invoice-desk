@@ -7,6 +7,7 @@ from pathlib import Path
 from invoice_batch import SITE, choose_date, recognize_captcha, refresh_captcha, read_result, save_result_screenshot
 from engine.diagnostics import failure_report, human_reason
 from engine.startup_debug import trace
+from engine.invoice import image_name
 
 
 class VerificationError(Exception):
@@ -84,10 +85,12 @@ class BrowserEngine:
             if inputs.count() != 5:
                 raise VerificationError("查验页面结构异常，正在重新加载")
             self.update_stage("正在填写发票信息")
+            inputs.nth(0).fill(row.get("invoice_code", ""))
             inputs.nth(1).fill(row["invoice_number"])
             choose_date(page, row["issue_date"])
             inputs.nth(3).fill(row["amount"])
-            if inputs.nth(1).input_value() != row["invoice_number"] or inputs.nth(3).input_value() != row["amount"]:
+            if any(inputs.nth(index).input_value() != value for index, value in
+                   ((0, row.get("invoice_code", "")), (1, row["invoice_number"]), (3, row["amount"]))):
                 raise VerificationError("页面未正确接收发票信息")
             self.update_stage("正在自动识别验证码")
             captcha = None
@@ -117,7 +120,7 @@ class BrowserEngine:
                     dialog = page.locator(".t-dialog:visible").filter(has_text="发票详情").filter(has_text=row["invoice_number"]).last
                     if dialog.count():
                         self.update_stage("正在保存最终发票")
-                        destination = Path(output) / f"{row['invoice_number']}.png"
+                        destination = Path(output) / image_name(row)
                         temporary = destination.with_suffix(".partial.png")
                         try:
                             save_result_screenshot(page, temporary, "查验成功")

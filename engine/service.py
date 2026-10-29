@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from engine.excel import read_workbook
+from engine.invoice import image_name
 from engine.diagnostics import failure_report, human_reason, resources
 from engine.startup_debug import trace
 from engine.worker_pipe import ParentConnection, WorkerConnection, launch_worker
@@ -291,7 +292,7 @@ def run_batch(parsed, output, state_path, controls, client, reset_failed=False, 
             if not controls.wait(0):
                 break
             record = items.get(invoice["id"], {"attempts": 0})
-            final = output / f"{invoice['invoice_number']}.png"
+            final = output / image_name(invoice)
             if record.get("kind") == "success" and (not final.is_file() or final.stat().st_size < 100):
                 record.clear()
                 record["attempts"] = 0

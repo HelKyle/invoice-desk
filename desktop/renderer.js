@@ -21,14 +21,14 @@ function renderInvoiceTable(next) {
   }
   const labels = { pending: '待查验', checking: '查验中', retry: '待重试', success: '已保存', rejected: '平台返回结果', failed: '重试后失败', skipped: '已跳过' };
   const rows = (imported.invoices || []).map((invoice, index) => ({
-    number: invoice.invoice_number, location: `${invoice.sheet} 第${invoice.excel_row}行`, index: index + 1,
+    number: invoice.invoice_number, code: invoice.invoice_code || '—', location: `${invoice.sheet} 第${invoice.excel_row}行`, index: index + 1,
     kind: next.invoiceStates?.[invoice.id]?.kind || 'pending', attempts: next.invoiceStates?.[invoice.id]?.attempts || 0,
     reason: next.invoiceStates?.[invoice.id]?.reason || '',
   }));
   const counts = kind => rows.filter(row => row.kind === kind).length;
   const issues = imported.issues || [];
   text('invoice-table-summary', `导入 ${imported.total} 张 · ${counts('success')} 已保存 · ${counts('failed')} 重试后失败 · ${counts('rejected')} 平台结果${issues.length ? ` · ${issues.length} 行已跳过` : ''}${imported.duplicates ? ` · ${imported.duplicates} 条重复已合并` : ''}`);
-  rows.push(...issues.map((issue, index) => ({ number: issue.invoice_number || '—', location: issue.location,
+  rows.push(...issues.map((issue, index) => ({ number: issue.invoice_number || '—', code: issue.invoice_code || '—', location: issue.location,
     index: rows.length + index + 1, kind: 'skipped', attempts: 0, reason: issue.message })));
   const filtered = rows.filter(row => invoiceFilter === 'all' || (invoiceFilter === 'unfinished' ? !['success', 'skipped'].includes(row.kind) : row.kind === invoiceFilter));
   const pageCount = Math.max(1, Math.ceil(filtered.length / invoicePageSize));
@@ -38,17 +38,17 @@ function renderInvoiceTable(next) {
     const tr = document.createElement('tr');
     tr.dataset.status = row.kind;
     const statusLabel = row.kind === 'rejected' ? row.reason || labels.rejected : labels[row.kind] || '待查验';
-    for (const [index, value] of [row.index, row.number, row.location, statusLabel, row.attempts, row.reason || (row.kind === 'success' ? '已保存发票详情' : '—')].entries()) {
+    for (const [index, value] of [row.index, row.number, row.code, row.location, statusLabel, row.attempts, row.reason || (row.kind === 'success' ? '已保存发票详情' : '—')].entries()) {
       const td = document.createElement('td');
       td.textContent = value;
-      if (index === 1) td.className = 'invoice-number';
-      if (index === 3) td.className = `invoice-status ${Object.hasOwn(labels, row.kind) ? row.kind : 'pending'}`;
+      if (index === 1 || index === 2) td.className = 'invoice-number';
+      if (index === 4) td.className = `invoice-status ${Object.hasOwn(labels, row.kind) ? row.kind : 'pending'}`;
       tr.append(td);
     }
     return tr;
   });
   if (!elements.length) {
-    const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 6;
+    const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 7;
     td.className = 'invoice-empty'; td.textContent = imported.total && !imported.invoices ? '请重新导入原 Excel，已有进度将保留。' : '没有符合此状态的发票';
     tr.append(td); elements.push(tr);
   }
@@ -77,7 +77,7 @@ function render(next) {
   text('import-button', imported ? '更换 Excel ↗' : '选择 Excel ↗');
   show('import-details', Boolean(imported));
   if (imported) {
-    text('mapping-description', imported.mappings.map(mapping => `“${mapping.sheet}”已识别：${mapping.labels.invoice_number} / ${mapping.labels.issue_date} / ${mapping.labels.amount}`).join('；'));
+    text('mapping-description', imported.mappings.map(mapping => `“${mapping.sheet}”已识别：${mapping.labels.invoice_number} / ${mapping.labels.issue_date} / ${mapping.labels.amount}${mapping.labels.invoice_code ? ` / ${mapping.labels.invoice_code}` : ''}`).join('；'));
     const issues = imported.issues || [];
     const warnings = imported.warnings || [];
     show('import-issues', issues.length + warnings.length > 0);

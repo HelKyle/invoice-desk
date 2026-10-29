@@ -14,6 +14,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.utils.datetime import CALENDAR_MAC_1904, to_excel
 from engine.excel import read_workbook
+from engine.invoice import image_name
 from engine.service import Controls, WorkerClient, run_batch
 
 NUMBER = "00000000000000000001"
@@ -55,7 +56,7 @@ class ScriptedClient:
             self.callback()
         result = next(self.results)
         if result["kind"] == "success":
-            Path(output, f"{invoice['invoice_number']}.png").write_bytes(b"final-invoice" * 20)
+            Path(output, image_name(invoice)).write_bytes(b"final-invoice" * 20)
         return result
 
     def close(self):
@@ -96,11 +97,31 @@ class ExcelTests(unittest.TestCase):
                               [NUMBER2, 20260123, 20]], epoch=CALENDAR_MAC_1904)
         self.assertEqual([i["issue_date"] for i in read_workbook(path)["invoices"]], ["20260206", "20260123"])
 
-    def test_numeric_identifiers_are_rejected_instead_of_silently_rounded(self):
-        path = self.workbook([["发票号码", "日期", "金额"], [int(NUMBER), "2026-01-23", 123]])
+    def test_identifiers_have_no_length_or_format_restrictions(self):
+        path = self.workbook([["发票号码", "日期", "金额", "发票代码"],
+                              ["00123456", "2026-01-23", 123, "001"],
+                              ["x" * 300, "2026-01-23", 456, " code / 甲 "],
+                              [12345678, "2026-01-23", 789, 1234]])
         result = read_workbook(path)
-        self.assertEqual(result["total"], 0)
-        self.assertIn("精度", result["issues"][0]["message"])
+        self.assertFalse(result["issues"])
+        self.assertEqual([(i["invoice_number"], i["invoice_code"]) for i in result["invoices"]],
+                         [("00123456", "001"), ("x" * 300, " code / 甲 "), ("12345678", "1234")])
+
+    def test_mixed_new_and_old_invoices_use_number_for_deduplication(self):
+        path = self.workbook([["发票代码", "发票号码", "开票日期", "含税金额"],
+                              [None, NUMBER, "2026-01-23", 123],
+                              ["001", "00123456", "2026-01-23", 100],
+                              ["002", "00223456", "2026-01-23", 200],
+                              ["002", "00223456", "2026-01-23", 200],
+                              ["003", "00323456", "2026-01-23", 300],
+                              ["004", "00323456", "2026-01-23", 300]])
+        result = read_workbook(path)
+        self.assertEqual([(i["invoice_code"], i["amount"]) for i in result["invoices"]],
+                         [("", "123.00"), ("001", "100.00"), ("002", "200.00")])
+        self.assertEqual(result["duplicates"], 1)
+        self.assertEqual(len(result["issues"]), 2)
+        self.assertTrue(all(i["invoice_number"] == "00323456" for i in result["issues"]))
+        self.assertIn("不做税额换算", result["warnings"][0])
 
     def test_duplicates_merge_but_conflicting_invoice_is_excluded(self):
         path = self.workbook([["发票号码", "日期", "含税金额"],
@@ -111,10 +132,12 @@ class ExcelTests(unittest.TestCase):
         self.assertEqual(result["duplicates"], 1)
         self.assertEqual(len(result["issues"]), 2)
 
-    def test_net_amount_only_is_not_treated_as_gross(self):
-        path = self.workbook([["发票号码", "日期", "不含税金额"], [NUMBER, "2026-01-23", 123]])
-        with self.assertRaisesRegex(ValueError, "表头"):
-            read_workbook(path)
+    def test_net_amount_header_is_supported_without_tax_conversion(self):
+        path = self.workbook([["发票号码", "日期", "不含税金额", "发票代码"],
+                              ["00123456", "2026-01-23", 123.45, "001"]])
+        result = read_workbook(path)
+        self.assertEqual(result["invoices"][0]["amount"], "123.45")
+        self.assertEqual(result["mappings"][0]["labels"]["amount"], "不含税金额")
 
     def test_ambiguous_invoice_columns_require_correction(self):
         path = self.workbook([["发票号码", "发票号码", "日期", "金额"], [NUMBER, NUMBER2, "2026-01-23", 123]])
@@ -301,6 +324,18 @@ class RecoveryTests(unittest.TestCase):
         retry = ScriptedClient([])
         self.run_batch(retry, reset_failed=True)
         self.assertEqual(retry.calls, [])
+
+    def test_old_invoice_is_saved_by_number_and_resumes(self):
+        self.parsed["invoices"] = [
+            {"id": "a", "invoice_code": "001", "invoice_number": "12345678", "sheet": "Sheet1", "excel_row": 2},
+        ]
+        self.run_batch(ScriptedClient([{"kind": "success"}]))
+        self.assertEqual([p.name for p in self.output.iterdir()], ["12345678.png"])
+        self.run_batch(ScriptedClient([]))
+        (self.output / "12345678.png").unlink()
+        resumed = ScriptedClient([{"kind": "success"}])
+        self.run_batch(resumed)
+        self.assertEqual(resumed.calls, ["a"])
 
     def test_hung_process_is_terminated_and_can_restart(self):
         client = WorkerClient(self.controls, timeout=0.2, worker_command=worker_command('hang'), startup_timeout=5)

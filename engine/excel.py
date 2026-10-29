@@ -12,7 +12,7 @@ ALIASES = {
     "invoice_number": ["发票号码", "发票号", "数电票号码", "数电发票号码", "电子发票号码", "票据号码", "invoice number", "invoice no", "invoice no."],
     "invoice_code": ["发票代码", "票据代码", "invoice code"],
     "issue_date": ["开票日期", "开票时间", "发票日期", "发票开具日期", "开具日期", "开具时间", "日期", "invoice date", "issue date"],
-    "amount": ["价税合计", "价税合计小写", "价税合计金额", "含税金额", "含税总金额", "合计金额含税", "金额含税", "总金额", "合计金额", "发票金额", "金额", "total amount", "invoice amount", "amount"],
+    "amount": ["价税合计", "价税合计小写", "价税合计金额", "含税金额", "含税总金额", "合计金额含税", "金额含税", "总金额", "合计金额", "发票金额", "金额", "total amount", "invoice amount", "amount", "不含税金额", "金额不含税", "税前金额", "net amount"],
 }
 
 
@@ -52,12 +52,13 @@ def detect_header(values, previous=None):
 
 
 def parse_number(value):
-    if isinstance(value, (int, float, Decimal)):
-        raise ValueError("发票号码以数字存储，Excel 可能已丢失精度；请从原始数据重新导出为文本")
-    number = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value or "")).strip().lstrip("'"))
-    if not re.fullmatch(r"[0-9]{20}", number):
-        raise ValueError("当前支持20位数电发票号码，请检查号码是否完整并以文本存储")
-    return number
+    # Preserve text identifiers verbatim. XLS exposes numeric cells as floats.
+    # Never pad identifiers or try to reconstruct precision already lost in Excel.
+    if value is None:
+        return ""
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def parse_date(value, epoch):
@@ -144,8 +145,8 @@ def read_workbook(source):
                         continue
                     headers = found
                     mappings.append({"sheet": name, "row": row_index, "labels": labels})
-                    if normalize(labels["amount"]) in ("金额", "发票金额", "合计金额", "总金额", "amount", "invoiceamount", "totalamount"):
-                        warnings.append(f"{name}：将“{labels['amount']}”作为价税合计，请确保包含税额。")
+                    if "invoice_code" in headers or normalize(labels["amount"]) in ("金额", "发票金额", "合计金额", "总金额", "amount", "invoiceamount", "totalamount", "不含税金额", "金额不含税", "税前金额", "netamount"):
+                        warnings.append(f"{name}：使用“{labels['amount']}”列的金额，不做税额换算。有发票代码的旧票请提供不含税金额，无代码的数电票请提供含税金额。")
                     continue
                 def cell(field):
                     index = headers.get(field)
@@ -162,25 +163,26 @@ def read_workbook(source):
                     parsed_number = parse_number(number)
                     invoice = {
                         "invoice_number": parsed_number,
-                        "invoice_code": "",  # 20位数电发票无需代码。
+                        "invoice_code": parse_number(cell("invoice_code")),
                         "issue_date": parse_date(cell("issue_date"), epoch),
                         "amount": parse_amount(cell("amount")),
                         "sheet": name, "excel_row": row_index,
                     }
                     identity = [invoice[k] for k in ("invoice_code", "invoice_number", "issue_date", "amount")]
                     invoice["id"] = hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:24]
-                    old = seen.get(invoice["invoice_number"])
+                    key = invoice["invoice_number"]
+                    old = seen.get(key)
                     if old:
-                        if old["id"] == invoice["id"] and invoice["invoice_number"] not in conflicts:
+                        if old["id"] == invoice["id"] and key not in conflicts:
                             duplicates += 1
                         else:
-                            if invoice["invoice_number"] not in conflicts:
+                            if key not in conflicts:
                                 invoices.remove(old)
-                                issues.append({"location": f"{old['sheet']} 第{old['excel_row']}行", "invoice_number": old["invoice_number"], "message": "同一发票号码对应不同日期或金额，请核对"})
-                            conflicts.add(invoice["invoice_number"])
-                            issues.append({"location": location, "invoice_number": parsed_number, "message": "同一发票号码对应不同日期或金额，请核对"})
+                                issues.append({"location": f"{old['sheet']} 第{old['excel_row']}行", "invoice_number": old["invoice_number"], "invoice_code": old["invoice_code"], "message": "同一发票号码对应不同代码、日期或金额，请核对"})
+                            conflicts.add(key)
+                            issues.append({"location": location, "invoice_number": parsed_number, "invoice_code": invoice["invoice_code"], "message": "同一发票号码对应不同代码、日期或金额，请核对"})
                         continue
-                    seen[invoice["invoice_number"]] = invoice
+                    seen[key] = invoice
                     invoices.append(invoice)
                 except (ValueError, OverflowError, TypeError) as exc:
                     issues.append({"location": location, "invoice_number": parsed_number, "message": str(exc)})

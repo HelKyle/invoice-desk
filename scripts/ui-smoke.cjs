@@ -21,7 +21,7 @@ async function waitForState(page, predicate, timeout = 30000) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'invoice-desk-ui-'));
   const workbook = path.join(directory, '发票列表.xlsx');
   const python = process.env.INVOICE_PYTHON || path.join(root, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
-  const setup = spawnSync(python, ['-c', 'from openpyxl import Workbook; import sys; w=Workbook(); s=w.active; s.append(["报销列表"]); s.append(["发票号", "日期", "价税合计（元）"]); s.append(["00000000000000000001", "2026-01-23", 1234.56]); w.save(sys.argv[1])', workbook]);
+  const setup = spawnSync(python, ['-c', 'from openpyxl import Workbook; import sys; w=Workbook(); s=w.active; s.append(["报销列表"]); s.append(["发票号", "日期", "金额（元）", "发票代码"]); s.append(["00000000000000000001", "2026-01-23", 1234.56, "001"]); w.save(sys.argv[1])', workbook]);
   assert.equal(setup.status, 0, setup.stderr.toString());
   await fs.mkdir(path.join(root, 'test-artifacts'), { recursive: true });
   const launchOptions = { args: process.env.INVOICE_APP_EXE ? [] : [root], env: { ...process.env, INVOICE_APP_DATA: directory, INVOICE_DEBUG: '1' }, timeout: 30000 };
@@ -44,6 +44,9 @@ async function waitForState(page, predicate, timeout = 30000) {
     const imported = await page.evaluate(() => window.invoiceDesk.getState());
     assert.equal(imported.import.total, 1);
     assert.equal(imported.import.issues.length, 0);
+    assert.equal(imported.import.invoices[0].invoice_code, '001');
+    assert.match(await page.locator('#mapping-description').innerText(), /发票代码/);
+    assert.equal(await page.locator('#invoice-table-body tr td').nth(2).innerText(), '001');
     if (launchOptions.env.INVOICE_DEBUG === '1') {
       assert.equal(imported.debug, true);
       assert.equal(await page.locator('#open-diagnostics').isVisible(), true);
