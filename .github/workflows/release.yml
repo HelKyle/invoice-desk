@@ -9,8 +9,20 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: Check release version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a version bump for app changes
+        run: node scripts/check-release-version.cjs
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: version
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40

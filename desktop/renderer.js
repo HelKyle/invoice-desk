@@ -67,7 +67,7 @@ function render(next) {
   const finished = next.phase === 'finished';
   const percentage = progress.total ? Math.round(progress.completed / progress.total * 100) : 0;
   show('notice', Boolean(notice)); text('notice', notice);
-  text('app-version', `Invoice Desk · ${next.version || '1.0.3'}${next.debug ? ' · Debug' : ''}`);
+  text('app-version', `Invoice Desk · ${next.version || '开发版'}${next.debug ? ' · Debug' : ''}`);
   show('open-diagnostics', next.debug === true);
   text('retry-note', `自动识别验证码 · 异常最多重试 ${next.retryLimit ?? 2} 次（共 ${(next.retryLimit ?? 2) + 1} 次尝试）`);
   show('copy-diagnostics', Boolean(next.diagnostic || next.engineStderr || next.phase === 'stopped' || running));

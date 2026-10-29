@@ -4,9 +4,9 @@
 
 ## 使用
 
-Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.3-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。
+Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.4-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。
 
-macOS 14 及以上、Apple Silicon：解压 `release/InvoiceDesk-1.0.0-mac-arm64.zip`，打开“发票查验.app”。本地构建未做开发者签名；macOS 如拦截，可在“系统设置 → 隐私与安全性”允许打开。
+macOS 14 及以上、Apple Silicon：解压 `release/InvoiceDesk-1.0.4-mac-arm64.zip`，打开“发票查验.app”。本地构建未做开发者签名；macOS 如拦截，可在“系统设置 → 隐私与安全性”允许打开。
 
 1. 选择或拖入 Excel（`.xlsx`、`.xlsm`、`.xls`）。
 2. App 显示导入数量和逐张发票明细表；每张显示号码、代码、Excel 位置、状态、尝试次数及最近原因。无效行显示“已跳过”及原因，可按状态筛选、翻页。
@@ -55,7 +55,7 @@ stdin 在初始化期间关闭不会判为用户取消；进入查验后控制�
 
 正常运行不要求管理员身份。只有具体错误提示“拒绝访问”时才排查文件权限或安全软件策略；只有内存／虚拟内存错误或相关资源数据支持时才判断内存不足。此版改善错误定位，不代表已经验证并修复所有 Windows 环境中的启动故障。
 
-需要 Node.js 24 和 Python 3.11/3.12。可以本地打包；main 每次 push 也会自动运行 GitHub Actions 并发布 Release。
+需要 Node.js 24 和 Python 3.11/3.12。可以本地打包；main 每次 push 也会自动运行 GitHub Actions；涉及 App、引擎、依赖或构建发布脚本的改动须提升版本号，检查通过后才构建并发布 Release。提交前可运行 `node scripts/check-release-version.cjs --base origin/main`。手动触发 workflow 可重建同一版本。
 
 ```bash
 npm ci

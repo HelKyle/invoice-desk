@@ -1,7 +1,7 @@
 {
   "name": "invoice-desk",
-  "version": "1.0.3",
-  "description": "导入 Excel，自动查验数电发票，只保留最终发票详情",
+  "version": "1.0.4",
+  "description": "导入 Excel，自动查验数电及旧版发票，只保留最终发票详情",
   "author": "Invoice Desk",
   "license": "UNLICENSED",
   "private": true,
