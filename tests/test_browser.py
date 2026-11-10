@@ -21,11 +21,16 @@ class FixedOCR:
         return "AB12"
 
 
-def fixture(outcome, number=NUMBER, expected=None):
+def fixture(outcome, number=NUMBER, expected=None, first_use_prompt=False):
     image = io.BytesIO()
     Image.new("RGB", (120, 50), "white").save(image, format="PNG")
     source = "data:image/png;base64," + base64.b64encode(image.getvalue()).decode()
-    html = f'''<!doctype html><html><head><meta charset="UTF-8"></head><body>
+    prompt = '''<aside class="first-use-prompt" style="position:fixed;right:0;bottom:0;z-index:999999">
+      <header>提示 <button aria-label="关闭">×</button></header>
+      <p>首次使用本平台，建议您点击页面上的“常见问题”和“操作说明”功能菜单了解本平台。</p>
+      <script>document.querySelector('.first-use-prompt button').onclick=()=>document.querySelector('.first-use-prompt').remove();</script>
+    </aside>''' if first_use_prompt else ""
+    html = f'''<!doctype html><html><head><meta charset="UTF-8"></head><body>{prompt}
       <input class="t-input__inner" value="stale-code"><input class="t-input__inner">
       <input class="t-input__inner" placeholder="YYYYMMDD"><input class="t-input__inner">
       <input class="t-input__inner" placeholder="请输入">
@@ -41,7 +46,7 @@ def fixture(outcome, number=NUMBER, expected=None):
       if(outcome==='js') throw Error('simulated broken JavaScript');
       if(outcome==='timeout') return;
       const result=document.getElementById('result');
-      if(outcome==='success') result.innerHTML='<div class="t-dialog" style="width:400px;height:240px;overflow:auto"><h2>发票详情</h2><p>{number}</p><p>当日查验次数：1</p><div style="height:600px">最终发票内容</div></div>';
+      if(outcome==='success') result.innerHTML='<div class="t-dialog" style="position:relative;z-index:1;width:400px;height:240px;overflow:auto"><h2>发票详情</h2><p>{number}</p><p>当日查验次数：1</p><div style="height:600px">最终发票内容</div></div>';
       if(outcome==='rejected') result.textContent='查验结果：不一致';
       if(outcome==='rate') result.textContent='您的访问过于频繁';
       if(outcome==='captcha') result.textContent='验证码错误';
@@ -65,9 +70,9 @@ class BrowserTests(unittest.TestCase):
         self.output = Path(self.temporary.name)
         self.row = {"id": self.id(), "invoice_number": NUMBER, "invoice_code": "", "issue_date": "20260123", "amount": "1234.56"}
 
-    def verify(self, outcome, expected=None):
+    def verify(self, outcome, expected=None, first_use_prompt=False):
         page = self.engine.prepare(self.row)
-        page.route("https://invoice.test/**", lambda route: route.fulfill(body=fixture(outcome, self.row["invoice_number"], expected), content_type="text/html"))
+        page.route("https://invoice.test/**", lambda route: route.fulfill(body=fixture(outcome, self.row["invoice_number"], expected, first_use_prompt), content_type="text/html"))
         with patch("engine.browser.choose_date", lambda p, date: p.locator('input[placeholder="YYYYMMDD"]').fill(date)):
             return self.engine.verify(self.row, self.output)
 
@@ -78,6 +83,17 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual([p.name for p in files], [f"{NUMBER}.png"])
         with Image.open(files[0]) as image:
             self.assertGreater(image.height, 600)
+
+    def test_invoice_dialog_is_brought_to_front_without_closing_prompt(self):
+        result = self.verify("success", first_use_prompt=True)
+        self.assertEqual(result["kind"], "success")
+        prompt = self.engine.page.locator(".first-use-prompt")
+        dialog = self.engine.page.locator(".t-dialog:visible").filter(has_text="发票详情")
+        self.assertTrue(prompt.is_visible())
+        self.assertGreater(
+            int(dialog.evaluate("node => getComputedStyle(node).zIndex")),
+            int(prompt.evaluate("node => getComputedStyle(node).zIndex")),
+        )
 
     def test_old_invoice_code_and_amount_reach_real_page_unchanged(self):
         self.row.update(invoice_number="00123456", invoice_code="001", amount="100.00")

@@ -14,6 +14,21 @@ class VerificationError(Exception):
     pass
 
 
+def bring_invoice_dialog_to_front(dialog):
+    """Keep the invoice above any help widgets that survive dismissal."""
+    dialog.evaluate("""root => {
+        const maximum = 2147483647;
+        let depth = 0;
+        for (let node = root; node && node !== document.body; node = node.parentElement) {
+            if (getComputedStyle(node).position === 'static') {
+                node.style.setProperty('position', 'relative', 'important');
+            }
+            node.style.setProperty('z-index', String(maximum - depth), 'important');
+            depth += 1;
+        }
+    }""")
+
+
 class BrowserEngine:
     def __init__(self, notify, site=SITE, models=None, response_timeout=25):
         self.notify = notify
@@ -120,6 +135,7 @@ class BrowserEngine:
                     dialog = page.locator(".t-dialog:visible").filter(has_text="发票详情").filter(has_text=row["invoice_number"]).last
                     if dialog.count():
                         self.update_stage("正在保存最终发票")
+                        bring_invoice_dialog_to_front(dialog)
                         destination = Path(output) / image_name(row)
                         temporary = destination.with_suffix(".partial.png")
                         try:
