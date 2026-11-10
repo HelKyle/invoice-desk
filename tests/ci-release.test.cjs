@@ -17,9 +17,15 @@ test('publishes a Windows-only release with its checksum', t => {
   fs.mkdirSync(bin);
   const installer = 'InvoiceDesk-1.0.7-win-x64.exe';
   fs.writeFileSync(path.join(assets, installer), 'tested installer');
-  const gh = path.join(bin, 'gh');
-  fs.writeFileSync(gh, `#!/bin/sh\nif [ "$1" = "api" ]; then printf '%s\\n' '${commit}'; else printf '%s\\n' '{"url":"https://example.invalid/release"}'; fi\n`);
-  fs.chmodSync(gh, 0o755);
+  const fakeGh = path.join(bin, 'fake-gh.cjs');
+  fs.writeFileSync(fakeGh, `const first = process.argv[2];\nconsole.log(first === 'api' ? '${commit}' : '{"url":"https://example.invalid/release"}');\n`);
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(bin, 'gh.cmd'), `@echo off\r\n"${process.execPath}" "${fakeGh}" %*\r\n`);
+  } else {
+    const gh = path.join(bin, 'gh');
+    fs.writeFileSync(gh, `#!/bin/sh\nexec "${process.execPath}" "${fakeGh}" "$@"\n`);
+    fs.chmodSync(gh, 0o755);
+  }
 
   const result = spawnSync(process.execPath, [releaseScript], {
     cwd,
