@@ -11,8 +11,7 @@
 
 从本仓库的 [Releases](https://github.com/HelKyle/invoice-desk/releases) 下载：
 
-- Windows 10/11 x64：运行 `.exe` 安装后打开“发票查验”。
-- macOS 14+ Apple Silicon：解压 `.zip`，打开“发票查验.app”。
+- Windows 10/11 x64：运行 `.exe` 安装后打开“发票查验”。当前自动发布仅构建 Windows 版本。
 
 导入 Excel，点击“开始查验”，完成后打开保存文件夹即可。代码和号码不限长度，建议以文本保存。可增加“发票代码”列（可空）；有代码的旧票填写不含税金额，无代码的数电票填写含税金额，金额不做换算。遇到启动异常，可在 App 底部复制诊断信息。
 
@@ -20,7 +19,7 @@
 
 ## 自动发布
 
-每次 push 到 `main`，GitHub Actions 在 Windows x64 和 macOS arm64 上运行测试、构建、运行库自检及打包版界面检查。两端全部成功后，自动发布独立的 GitHub Release，附带安装包和 SHA-256 校验文件。
+每次 push 到 `main`，GitHub Actions 在 Windows x64 上运行测试、构建、运行库自检及打包版界面检查。全部成功后，自动发布独立的 GitHub Release，附带 Windows 安装包和 SHA-256 校验文件。
 
 标签格式：`v<版本>-main.<构建号>-<提交短哈希>`。手动重跑同一次构建会更新同一个 Release；旧提交的构建不会抢占最新提交的 Latest 标记。也可以在 Actions 页面手动运行工作流。
 

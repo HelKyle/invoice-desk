@@ -14,9 +14,9 @@ async function main() {
   const version = require('../package.json').version;
   const tag = `v${version}-main.${run}-${commit.slice(0, 7)}`;
   const directory = path.resolve('release-assets');
-  const assets = fs.readdirSync(directory).filter(name => /^InvoiceDesk-.*\.(?:exe|zip)$/.test(name)).sort();
-  if (assets.length !== 2 || !assets.some(name => name.endsWith('-win-x64.exe')) || !assets.some(name => name.endsWith('-mac-arm64.zip'))) {
-    throw new Error('Windows 和 macOS 安装包必须全部构建、验收成功后才发布');
+  const assets = fs.readdirSync(directory).filter(name => /^InvoiceDesk-.*-win-x64\.exe$/.test(name)).sort();
+  if (assets.length !== 1) {
+    throw new Error('Windows 安装包必须构建、验收成功后才发布');
   }
   const sums = [];
   for (const name of assets) {
@@ -26,7 +26,7 @@ async function main() {
   }
   fs.writeFileSync(path.join(directory, 'SHA256SUMS'), sums.join('\n') + '\n');
   const notes = path.resolve('release-notes.md');
-  fs.writeFileSync(notes, `main 自动构建 #${run}\n\n提交：${commit}\n\n- 修复 macOS 应用资源签名不完整导致的“已损坏”提示；发布前验证最终 ZIP 解压后的签名与应用启动。\n- 支持可选发票代码，代码和号码不限长度；旧票填写不含税金额，金额不做换算。\n- 兼容原三列 Excel，图片按发票号码命名。\n- 发票明细表逐张显示状态、尝试次数、最后原因，可筛选失败及未完成发票。\n- 自动重试最多 2 次，首次查验加重试最多 3 次尝试。\n- Windows 查验 worker 改为直接启动 Python 和 JSON 管道，初始化失败不占用发票预算。\n- Windows 10/11 x64：下载 .exe 安装。\n- macOS 14+ Apple Silicon：下载 .zip 解压运行。\n- Python、OCR 模型、浏览器及 Windows C++ 运行库已内置。\n- 发布前已在 Windows 和 macOS 上执行引擎测试、真实 Electron 管道启动检查、运行库自检和打包版界面测试。\n- Windows 安装包未签名；macOS 使用 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证，首次打开需在系统设置中允许；SHA256SUMS 用于核对下载文件。\n\n[构建记录](https://github.com/${repository}/actions/runs/${runId})\n`);
+  fs.writeFileSync(notes, `main 自动构建 #${run}\n\n提交：${commit}\n\n- 截图前将发票详情及其承载层提升至最高层，避免被税务平台提示遮挡。\n- 支持可选发票代码，代码和号码不限长度；旧票填写不含税金额，金额不做换算。\n- 兼容原三列 Excel，图片按发票号码命名。\n- 发票明细表逐张显示状态、尝试次数、最后原因，可筛选失败及未完成发票。\n- 自动重试最多 2 次，首次查验加重试最多 3 次尝试。\n- Windows 查验 worker 使用直接启动 Python 和 JSON 管道，初始化失败不占用发票预算。\n- Windows 10/11 x64：下载 .exe 安装。\n- Python、OCR 模型、浏览器及 Windows C++ 运行库已内置。\n- 发布前已在 Windows 上执行引擎测试、真实 Electron 管道启动检查、运行库自检和打包版界面测试。\n- Windows 安装包未签名；SHA256SUMS 用于核对下载文件。\n\n[构建记录](https://github.com/${repository}/actions/runs/${runId})\n`);
   function gh(args, optional = false) {
     const result = spawnSync('gh', [...args, '--repo', repository], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
     if (result.status !== 0 && !optional) throw new Error(result.stderr || 'GitHub release 操作失败');

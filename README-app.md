@@ -4,9 +4,9 @@
 
 ## 使用
 
-Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.6-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。
+Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.7-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。当前 GitHub Actions 自动发布仅构建 Windows 版本。
 
-macOS 14 及以上、Apple Silicon：解压 `release/InvoiceDesk-1.0.6-mac-arm64.zip`，打开“发票查验.app”。应用使用 ad-hoc 签名保证包内文件完整性，尚无 Developer ID 签名和 Apple 公证；macOS 首次拦截时，可在“系统设置 → 隐私与安全性”允许打开。1.0.5 修复旧包跳过签名导致的“已损坏”提示，并在 CI 验证 ZIP 解压后的完整签名；1.0.6 在保存截图前直接将发票详情提升至最高层，避免被税务平台的提示遮挡。
+1.0.6 在保存截图前直接将发票详情提升至最高层，避免被税务平台的提示遮挡。1.0.7 将自动构建和 Release 调整为 Windows-only。
 
 1. 选择或拖入 Excel（`.xlsx`、`.xlsm`、`.xls`）。
 2. App 显示导入数量和逐张发票明细表；每张显示号码、代码、Excel 位置、状态、尝试次数及最近原因。无效行显示“已跳过”及原因，可按状态筛选、翻页。
