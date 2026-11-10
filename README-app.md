@@ -4,9 +4,9 @@
 
 ## 使用
 
-Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.7-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。当前 GitHub Actions 自动发布仅构建 Windows 版本。
+Windows 10/11 x64：运行 `release/InvoiceDesk-1.0.8-win-x64.exe`，安装后从桌面或开始菜单打开“发票查验”。当前 GitHub Actions 自动发布仅构建 Windows 版本。
 
-1.0.6 在保存截图前直接将发票详情提升至最高层，避免被税务平台的提示遮挡。1.0.7 将自动构建和 Release 调整为 Windows-only。
+1.0.6 在保存截图前直接将发票详情提升至最高层，避免被税务平台的提示遮挡。1.0.8 将自动构建和 Release 调整为 Windows-only，并修正 Windows CI 的 Release 测试。
 
 1. 选择或拖入 Excel（`.xlsx`、`.xlsm`、`.xls`）。
 2. App 显示导入数量和逐张发票明细表；每张显示号码、代码、Excel 位置、状态、尝试次数及最近原因。无效行显示“已跳过”及原因，可按状态筛选、翻页。
